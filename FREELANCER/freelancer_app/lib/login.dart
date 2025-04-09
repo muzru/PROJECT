@@ -1,10 +1,8 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:freelancer_app/dashboard.dart';
-import 'package:freelancer_app/homepage.dart';
 import 'package:freelancer_app/main.dart';
 import 'package:freelancer_app/signup.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});

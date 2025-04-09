@@ -6,7 +6,7 @@ import 'package:animated_text_kit/animated_text_kit.dart';
 import 'package:audioplayers/audioplayers.dart'; // Make sure this is in your pubspec.yaml
 
 class SplashScreen extends StatefulWidget {
-  const SplashScreen({Key? key}) : super(key: key);
+  const SplashScreen({super.key});
   @override
   State<SplashScreen> createState() => _SplashScreenState();
 }
@@ -144,7 +144,7 @@ class _SplashScreenState extends State<SplashScreen>
                 const SizedBox(height: 20),
 
                 // 🕓 Loading Bar
-                Container(
+                SizedBox(
                   width: 120,
                   child: const LinearProgressIndicator(
                     backgroundColor: Colors.white24,

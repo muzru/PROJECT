@@ -8,7 +8,7 @@ class AddSkillsPage extends StatefulWidget {
 
 class _AddSkillsPageState extends State<AddSkillsPage> {
   final TextEditingController _skillController = TextEditingController();
-  List<String> _skills = [];
+  final List<String> _skills = [];
 
   void _addSkill() {
     if (_skillController.text.isNotEmpty) {

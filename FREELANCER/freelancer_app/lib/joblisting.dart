@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 class JobListingPage extends StatefulWidget {
+  const JobListingPage({super.key});
+
   @override
   _JobListingPageState createState() => _JobListingPageState();
 }

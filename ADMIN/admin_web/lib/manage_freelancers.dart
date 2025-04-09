@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class ManageFreelancers extends StatefulWidget {
+  const ManageFreelancers({super.key});
+
   @override
   _ManageFreelancersState createState() => _ManageFreelancersState();
 }

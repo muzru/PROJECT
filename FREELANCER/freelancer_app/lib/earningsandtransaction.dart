@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 class EarningsPage extends StatefulWidget {
+  const EarningsPage({super.key});
+
   @override
   _EarningsPageState createState() => _EarningsPageState();
 }

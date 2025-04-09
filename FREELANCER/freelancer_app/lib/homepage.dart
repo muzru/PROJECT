@@ -49,8 +49,8 @@ class _HomePageState extends State<HomePage>
       setState(() {
         _userName = (response['freelancer_name'] as String?)
             ?.trim() // Remove leading/trailing spaces
-            ?.split(RegExp(r'\s+')) // Split on any whitespace
-            ?.first;
+            .split(RegExp(r'\s+')) // Split on any whitespace
+            .first;
 
         _profileImageUrl = response['freelancer_photo'];
         print("Profile Image URL: $_profileImageUrl");
