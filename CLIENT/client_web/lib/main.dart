@@ -1,4 +1,5 @@
 import 'package:client_web/login.dart';
+import 'package:client_web/splashscreen.dart';
 import 'package:client_web/welcome.dart';
 import 'package:flutter/material.dart';
 
@@ -21,7 +22,7 @@ class MainApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const MaterialApp(
-      home: WelcomePage(), // Removed the semicolon
+      home: SplashScreen(), // Removed the semicolon
     );
   }
 }

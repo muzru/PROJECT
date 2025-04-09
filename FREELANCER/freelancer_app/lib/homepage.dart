@@ -47,8 +47,14 @@ class _HomePageState extends State<HomePage>
       print("User data: $response");
 
       setState(() {
-        _userName = response['freelancer_name'] as String?;
+        _userName = (response['freelancer_name'] as String?)
+            ?.trim() // Remove leading/trailing spaces
+            ?.split(RegExp(r'\s+')) // Split on any whitespace
+            ?.first;
+
         _profileImageUrl = response['freelancer_photo'];
+        print("Profile Image URL: $_profileImageUrl");
+        print(_userName);
       });
     } catch (e) {
       print("Error fetching user data: $e");
@@ -116,21 +122,19 @@ class _HomePageState extends State<HomePage>
         children: [
           CircleAvatar(
             radius: 30,
-            backgroundImage: NetworkImage(
-              _profileImageUrl != null
-                  ? "https://via.placeholder.com/150"
-                  : _profileImageUrl!,
-            ),
+            backgroundImage: _profileImageUrl != null
+                ? NetworkImage(_profileImageUrl!)
+                : const AssetImage("assets/newlogo.png") as ImageProvider,
           ),
           const SizedBox(width: 10),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                "Welcome Back, ${_userName ?? 'User'}!",
+                "Welcome Back, ${_userName ?? 'User'}",
                 style: const TextStyle(
                   color: Colors.white,
-                  fontSize: 20,
+                  fontSize: 16,
                   fontWeight: FontWeight.bold,
                 ),
               ),

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 class DisputesPage extends StatefulWidget {
+  const DisputesPage({super.key});
+
   @override
   _DisputesPageState createState() => _DisputesPageState();
 }

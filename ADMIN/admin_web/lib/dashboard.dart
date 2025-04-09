@@ -1,7 +1,7 @@
-import 'package:admin_web/dispute.dart';
-import 'package:admin_web/payments.dart';
-import 'package:admin_web/reports.dart';
 import 'package:flutter/material.dart';
+import 'package:freelancer_app/dispute.dart';
+import 'package:freelancer_app/payments.dart';
+import 'package:freelancer_app/reports.dart';
 import 'manage_freelancers.dart';
 import 'manage_clients.dart';
 import 'manage_skills.dart';
@@ -127,7 +127,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                         MaterialPageRoute(
                           builder: (context) =>
                               selectedUserType == "Freelancers"
-                                  ? ManageFreelancersPage()
+                                  ? ManageFreelancers()
                                   : ManageClientsPage(),
                         ),
                       );

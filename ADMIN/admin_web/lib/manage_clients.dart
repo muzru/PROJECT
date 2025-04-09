@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 class ManageClientsPage extends StatelessWidget {
+  ManageClientsPage({super.key});
   final List<String> clients = ["Michael Lee", "Emma Watson", "David Johnson"];
 
   @override
