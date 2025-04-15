@@ -7,11 +7,17 @@ environment:
   sdk: ^3.6.0
 
 dependencies:
+  cached_network_image: ^3.4.1
+  fl_chart: ^0.70.2
   flutter:
     sdk: flutter
+  google_fonts: ^6.2.1
   image_picker: ^1.0.4  
+  pdf: ^3.11.3
   shared_preferences: ^2.2.2
   supabase_flutter: ^2.8.3 # Ensure it's the latest version
+  timeago: ^3.7.0
+  universal_html: ^2.2.4
 # Check for the latest version on pub.dev
 
 

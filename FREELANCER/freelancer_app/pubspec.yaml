@@ -7,11 +7,23 @@ environment:
   sdk: ^3.6.0
 
 dependencies:
+  cached_network_image: ^3.4.1
+  carousel_slider: ^5.0.0
+  dio: ^5.8.0+1
+  file_picker: ^10.1.2
   flutter:
     sdk: flutter
+  flutter_cached_pdfview: ^0.4.3
+  flutter_pdfview: ^1.4.0
+  google_fonts: ^6.2.1
   image_picker: ^1.0.4  
+  intl: ^0.20.2
+  open_filex: ^4.7.0
+  permission_handler: ^12.0.0+1
   shared_preferences: ^2.2.2
+  shimmer: ^3.0.0
   supabase_flutter: ^2.8.3 # Ensure it's the latest version
+  webview_flutter: ^4.10.0
 # Check for the latest version on pub.dev
 
 

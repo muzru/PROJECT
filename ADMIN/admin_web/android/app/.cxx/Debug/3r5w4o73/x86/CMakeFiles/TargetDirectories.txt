@@ -1,0 +1,2 @@
+D:/SkillConnect/ADMIN/admin_web/android/app/.cxx/Debug/3r5w4o73/x86/CMakeFiles/edit_cache.dir
+D:/SkillConnect/ADMIN/admin_web/android/app/.cxx/Debug/3r5w4o73/x86/CMakeFiles/rebuild_cache.dir

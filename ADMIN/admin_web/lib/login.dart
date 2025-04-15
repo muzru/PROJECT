@@ -3,8 +3,29 @@ import 'package:flutter/material.dart';
 import 'package:freelancer_app/dashboard.dart';
 import 'package:freelancer_app/main.dart';
 
+// First, create an AuthWrapper widget
+class AuthWrapper extends StatelessWidget {
+  const AuthWrapper({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    // Get the current session from Supabase
+    final session = supabase.auth.currentSession;
+
+    // If there's an active session, go to Dashboard
+    if (session != null && !session.isExpired) {
+      return const AdminDashboard();
+    }
+
+    // Otherwise, show the Login page
+    return const LoginPage();
+  }
+}
+
+// Modified LoginPage
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
+
   @override
   State<LoginPage> createState() => _LoginPageState();
 }
@@ -12,17 +33,17 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   bool isLoading = false;
 
   Future<void> _login() async {
+    if (isLoading) return;
+
     setState(() => isLoading = true);
     try {
       final response = await supabase.auth.signInWithPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
-      print(response);
 
       if (response.user != null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -31,14 +52,12 @@ class _LoginPageState extends State<LoginPage> {
             backgroundColor: Color.fromARGB(255, 86, 1, 1),
           ),
         );
-        Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => AdminDashboard(),
-            )); // Replace with your home route
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const AdminDashboard()),
+        );
       }
     } catch (e) {
-      print("Login error: $e");
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Login failed: $e")),
       );
@@ -55,15 +74,14 @@ class _LoginPageState extends State<LoginPage> {
           Container(
             decoration: BoxDecoration(
               image: DecorationImage(
-                image: AssetImage(
-                    "assets/freelancer login bg1.png"), // Background image
+                image: AssetImage("assets/freelancer login bg1.png"),
                 fit: BoxFit.cover,
               ),
             ),
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
               child: Container(
-                color: Color(0xFF0D3B1D).withOpacity(0.6), // Dark Green tint
+                color: Color(0xFF0D3B1D).withOpacity(0.6),
               ),
             ),
           ),
@@ -73,7 +91,7 @@ class _LoginPageState extends State<LoginPage> {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(15),
               ),
-              color: Color(0xFFA6C39F).withOpacity(0.95), // Greenish Beige
+              color: Color(0xFFA6C39F).withOpacity(0.95),
               child: Padding(
                 padding: const EdgeInsets.all(20.0),
                 child: Column(
@@ -81,7 +99,7 @@ class _LoginPageState extends State<LoginPage> {
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Image.asset(
-                      "assets/newlogo.png", // Your logo
+                      "assets/newlogo.png",
                       height: 80,
                     ),
                     SizedBox(height: 10),
@@ -102,7 +120,7 @@ class _LoginPageState extends State<LoginPage> {
                           labelText: "Email",
                           border: OutlineInputBorder(),
                           filled: true,
-                          fillColor: Color(0xFFDFFFD6), // Light Green
+                          fillColor: Color(0xFFDFFFD6),
                         ),
                       ),
                     ),
@@ -116,7 +134,7 @@ class _LoginPageState extends State<LoginPage> {
                           labelText: "Password",
                           border: OutlineInputBorder(),
                           filled: true,
-                          fillColor: Color(0xFFDFFFD6), // Light Green
+                          fillColor: Color(0xFFDFFFD6),
                         ),
                       ),
                     ),
@@ -124,18 +142,21 @@ class _LoginPageState extends State<LoginPage> {
                     SizedBox(
                       width: 250,
                       child: ElevatedButton(
-                        onPressed: _login,
+                        onPressed: isLoading ? null : _login,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Color(0xFF2E7D32), // Forest Green
+                          backgroundColor: Color(0xFF2E7D32),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
                           padding: EdgeInsets.symmetric(vertical: 14),
                         ),
-                        child: Text(
-                          "Login",
-                          style: TextStyle(color: Colors.white, fontSize: 16),
-                        ),
+                        child: isLoading
+                            ? CircularProgressIndicator(color: Colors.white)
+                            : Text(
+                                "Login",
+                                style: TextStyle(
+                                    color: Colors.white, fontSize: 16),
+                              ),
                       ),
                     ),
                   ],

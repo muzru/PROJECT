@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:freelancer_app/dashboard.dart';
 import 'package:freelancer_app/login.dart';
-import 'package:freelancer_app/signup.dart';
-
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 Future<void> main() async {
@@ -41,7 +38,7 @@ class MyApp extends StatelessWidget {
           bodyMedium: TextStyle(color: Color(0xFF253D2C)),
         ),
       ),
-      home: SignupPage(),
+      home: LoginPage(),
     );
   }
 }

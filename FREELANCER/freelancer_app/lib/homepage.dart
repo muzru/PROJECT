@@ -1,263 +1,971 @@
 import 'package:flutter/material.dart';
-import 'package:freelancer_app/main.dart';
+import 'package:freelancer_app/joblisting.dart';
+import 'package:freelancer_app/login.dart';
+import 'package:freelancer_app/myrequest.dart';
+import 'package:freelancer_app/profile.dart';
+import 'package:freelancer_app/workdetails.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:carousel_slider/carousel_slider.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
   @override
-  _HomePageState createState() => _HomePageState();
+  State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage>
-    with SingleTickerProviderStateMixin {
-  bool _isLoaded = false;
-  final GlobalKey<AnimatedListState> _listKey = GlobalKey<AnimatedListState>();
-  List<Map<String, String>> jobs = [];
+class _HomePageState extends State<HomePage> {
   String? _userName;
   String? _profileImageUrl;
+  List<String> _userSkills = [];
+  List<Map<String, dynamic>> _availableSkills = [];
+  final List<Map<String, dynamic>> _selectedSkills = [];
+  List<Map<String, dynamic>> _featuredJobs = [];
+  List<Map<String, dynamic>> _recentJobs = [];
+  List<Map<String, dynamic>> _notifications = [];
+  bool _isLoading = true;
+  String? _errorMessage;
+  int? _freelancerStatus;
+  final String _dailyTip = "Boost your profile by adding new skills today!";
 
   @override
   void initState() {
     super.initState();
-    _fetchUserData(); // Fetch user data on initialization
-    Future.delayed(const Duration(milliseconds: 500), () {
-      setState(() {
-        _isLoaded = true;
-      });
-      _loadJobListings();
-    });
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    setState(() => _isLoading = true);
+    try {
+      await Future.wait([
+        _fetchUserData(),
+        _fetchAvailableSkills(),
+        _fetchJobs(),
+        _fetchNotifications(),
+      ]);
+    } catch (e) {
+      setState(() => _errorMessage = "Failed to load data: $e");
+    } finally {
+      setState(() => _isLoading = false);
+    }
   }
 
   Future<void> _fetchUserData() async {
     try {
-      // Get the current authenticated user
-      final user = supabase.auth.currentUser;
+      final user = Supabase.instance.client.auth.currentUser;
       if (user == null) {
-        print("No user logged in");
+        setState(() => _userName = 'Guest');
         return;
       }
 
-      // Fetch user data from tbl_client
-      final response = await supabase
+      final profileResponse = await Supabase.instance.client
           .from('tbl_freelancer')
-          .select('freelancer_name, freelancer_photo')
+          .select('freelancer_name, freelancer_photo, freelancer_status')
           .eq('freelancer_id', user.id)
           .single();
-      print("User data: $response");
+
+      final skillsResponse = await Supabase.instance.client
+          .from('tbl_userskill')
+          .select('technicalskill_id, tbl_technicalskill(technicalskill_name)')
+          .eq('freelancer_id', user.id);
 
       setState(() {
-        _userName = (response['freelancer_name'] as String?)
-            ?.trim() // Remove leading/trailing spaces
-            .split(RegExp(r'\s+')) // Split on any whitespace
-            .first;
-
-        _profileImageUrl = response['freelancer_photo'];
-        print("Profile Image URL: $_profileImageUrl");
-        print(_userName);
+        final fullName = profileResponse['freelancer_name'] as String?;
+        _userName = fullName?.trim().isNotEmpty == true
+            ? fullName!.trim().split(RegExp(r'\s+')).first
+            : 'Freelancer';
+        _profileImageUrl = profileResponse['freelancer_photo'] as String?;
+        _freelancerStatus = profileResponse['freelancer_status'] as int? ?? 0;
+        _userSkills = (skillsResponse as List)
+            .map(
+                (e) => e['tbl_technicalskill']['technicalskill_name'] as String)
+            .toList();
       });
     } catch (e) {
+      setState(() {
+        _userName = 'Freelancer';
+        _freelancerStatus = 0;
+      });
       print("Error fetching user data: $e");
+    }
+  }
+
+  Future<void> _fetchAvailableSkills() async {
+    try {
+      final response = await Supabase.instance.client
+          .from('tbl_technicalskill')
+          .select('technicalskill_id, technicalskill_name');
+      setState(() {
+        _availableSkills = (response as List)
+            .map((e) => {
+                  'id': e['technicalskill_id'] as int,
+                  'name': e['technicalskill_name'] as String,
+                })
+            .toList();
+      });
+    } catch (e) {
+      print("Error fetching skills: $e");
+    }
+  }
+
+  Future<void> _fetchJobs() async {
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) return;
+
+      final featuredResponse = await Supabase.instance.client
+          .from('tbl_work')
+          .select('work_id, work_name, work_amount')
+          .order('created_at', ascending: false)
+          .limit(5);
+
+      final recentResponse = await Supabase.instance.client
+          .from('tbl_workrequest')
+          .select('''
+            work_id,
+            tbl_work (work_name, work_amount)
+          ''')
+          .eq('freelancer_id', user.id)
+          .order('created_at', ascending: false)
+          .limit(4);
+
+      setState(() {
+        _featuredJobs = featuredResponse
+            .map((job) => {
+                  'work_id': job['work_id'],
+                  'work_title': job['work_name'],
+                  'work_amount': job['work_amount'],
+                  'image_url': 'https://via.placeholder.com/300',
+                })
+            .toList();
+        _recentJobs = recentResponse
+            .map((request) => {
+                  'work_id': request['work_id'],
+                  'work_title': request['tbl_work']['work_name'],
+                  'work_amount': request['tbl_work']['work_amount'],
+                })
+            .toList();
+      });
+    } catch (e) {
+      print("Error fetching jobs: $e");
+    }
+  }
+
+  Future<void> _fetchNotifications() async {
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) return;
+
+      // Fetch unread messages from tbl_chat where the freelancer is the recipient
+      final chatResponse = await Supabase.instance.client
+          .from('tbl_chat')
+          .select('''
+          chat_id,
+          chat_content,
+          created_at,
+          fromfreelancer_id,
+          tbl_freelancer!tbl_chat_fromfreelancer_id_fkey (freelancer_name)
+        ''')
+          .eq('toclient_id',
+              user.id) // Assuming freelancer receives as client for simplicity
+          .eq('chat_isread', false) // Filter for unread messages
+          .order('created_at', ascending: false)
+          .limit(5);
+      print('Chat response: $chatResponse'); // Debugging output
+
+      // Fetch accepted work requests from tbl_workrequest
+      final workRequestResponse = await Supabase.instance.client
+          .from('tbl_workrequest')
+          .select('''
+          workrequest_id,
+          work_id,
+          tbl_work (work_name),
+          created_at,
+          workrequest_status
+        ''')
+          .eq('freelancer_id', user.id)
+          .eq('workrequest_status',
+              1) // Adjust based on your status field (e.g., '2' for accepted)
+          .order('created_at', ascending: false)
+          .limit(5);
+
+      print('Work request response: $workRequestResponse'); // Debugging output
+
+      setState(() {
+        // Process chat messages
+        final chatNotifications =
+            List<Map<String, dynamic>>.from(chatResponse).map((msg) {
+          final freelancerData =
+              msg['tbl_freelancer!tbl_chat_fromfreelancer_id_fkey']
+                      as Map<String, dynamic>? ??
+                  {};
+          return {
+            'notification_id': msg['chat_id'],
+            'message':
+                '${freelancerData['freelancer_name'] ?? 'Unknown'}: ${msg['chat_content'] ?? 'New message'}',
+            'created_at': msg['created_at'],
+            'chat_id': msg['chat_id'], // Store chat_id for marking as read
+            'type': 'chat', // Tag as chat notification
+          };
+        }).toList();
+
+        // Process accepted work requests
+        final workRequestNotifications =
+            List<Map<String, dynamic>>.from(workRequestResponse).map((req) {
+          return {
+            'notification_id': req['workrequest_id'],
+            'message':
+                'Work request accepted: ${req['tbl_work']['work_name'] ?? 'Unnamed Work'}',
+            'created_at': req['created_at'],
+            'work_id': req['work_id'], // Store work_id for potential navigation
+            'type': 'work_request', // Tag as work request notification
+          };
+        }).toList();
+
+        // Combine and sort by created_at
+        _notifications = [...chatNotifications, ...workRequestNotifications]
+          ..sort((a, b) =>
+              (b['created_at'] as String).compareTo(a['created_at'] as String));
+      });
+    } catch (e) {
+      print("Error fetching notifications: $e");
+      setState(() => _errorMessage =
+          "Failed to fetch notifications: $e"); // Update UI with error
+    }
+  }
+
+  Future<void> _markAsRead(int chatId) async {
+    try {
+      await Supabase.instance.client
+          .from('tbl_chat')
+          .update({'chat_isread': true}).eq('chat_id', chatId);
+      await _fetchNotifications(); // Refresh notifications
+    } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error loading profile: $e")),
+        SnackBar(content: Text("Error marking as read: $e")),
       );
     }
   }
 
-  void _loadJobListings() {
-    List<Map<String, String>> newJobs = [
-      {"title": "Flutter Developer Needed", "price": "\$500"},
-      {"title": "Logo Design for Startup", "price": "\$150"},
-      {"title": "SEO Content Writer", "price": "\$200"},
-    ];
-
-    Future.forEach(newJobs, (job) async {
-      await Future.delayed(const Duration(milliseconds: 300));
-      setState(() {
-        jobs.add(job);
-        _listKey.currentState?.insertItem(jobs.length - 1);
-      });
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            AnimatedOpacity(
-              opacity: _isLoaded ? 1.0 : 0.0,
-              duration: const Duration(milliseconds: 800),
-              child: _buildWelcomeBanner(),
-            ),
-            const SizedBox(height: 20),
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 800),
-              curve: Curves.easeOutBack,
-              transform: Matrix4.translationValues(0, _isLoaded ? 0 : 50, 0),
-              child: _buildCategoryGrid(),
-            ),
-            const SizedBox(height: 20),
-            _buildRecommendedJobs(),
-            const SizedBox(height: 20),
-            _buildQuickActions(),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Welcome Banner with Dynamic User Data
-  Widget _buildWelcomeBanner() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF2E6F40),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 30,
-            backgroundImage: _profileImageUrl != null
-                ? NetworkImage(_profileImageUrl!)
-                : const AssetImage("assets/newlogo.png") as ImageProvider,
+  void _showNotifications() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          'Notifications',
+          style: GoogleFonts.poppins(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.black87,
           ),
-          const SizedBox(width: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                "Welcome Back, ${_userName ?? 'User'}",
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: _notifications.isEmpty
+              ? Center(
+                  child: Text(
+                    'No notifications available.',
+                    style: GoogleFonts.poppins(
+                      fontSize: 14,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                )
+              : ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: _notifications.length,
+                  itemBuilder: (context, index) {
+                    final notification = _notifications[index];
+                    final isChat = notification['type'] == 'chat';
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8.0),
+                      child: GestureDetector(
+                        onTap: () {
+                          if (isChat) {
+                            _markAsRead(notification['chat_id']);
+                          }
+                          // Optionally navigate to work details for work requests
+                          // Navigator.push(context, MaterialPageRoute(builder: (context) => WorkDetailsPage(workId: notification['work_id'])));
+                        },
+                        child: Row(
+                          children: [
+                            Icon(
+                              isChat ? Icons.message : Icons.work,
+                              color: const Color(0xFF2E7D32),
+                              size: 20,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                notification['message'],
+                                style: GoogleFonts.poppins(
+                                  fontSize: 14,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              notification['created_at']
+                                      ?.toString()
+                                      .split(' ')[0] ??
+                                  'N/A',
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
                 ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Close',
+              style: GoogleFonts.poppins(
+                color: const Color(0xFF2E7D32),
               ),
-              const Text(
-                "Explore new projects & earn more!",
-                style: TextStyle(color: Colors.white70, fontSize: 14),
-              ),
-            ],
+            ),
           ),
         ],
       ),
     );
   }
 
-  /// Categories Grid
-  Widget _buildCategoryGrid() {
-    List<Map<String, dynamic>> categories = [
-      {"title": "Web Dev", "icon": Icons.web},
-      {"title": "Graphic Design", "icon": Icons.brush},
-      {"title": "Writing", "icon": Icons.edit},
-      {"title": "Marketing", "icon": Icons.campaign},
-    ];
+  Future<void> _addSelectedSkills() async {
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null || _selectedSkills.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("No skills selected or user not logged in"),
+          ),
+        );
+        return;
+      }
 
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        childAspectRatio: 2.5,
-        crossAxisSpacing: 10,
-        mainAxisSpacing: 10,
-      ),
-      itemCount: categories.length,
-      itemBuilder: (context, index) {
-        return AnimatedContainer(
-          duration: Duration(milliseconds: 600 + (index * 100)),
-          curve: Curves.easeOut,
-          transform: Matrix4.translationValues(0, _isLoaded ? 0 : 30, 0),
-          child: Card(
-            color: const Color(0xFF68BA7F),
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            child: Center(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(categories[index]["icon"], color: Colors.white),
-                  const SizedBox(width: 8),
-                  Text(
-                    categories[index]["title"],
-                    style: const TextStyle(color: Colors.white, fontSize: 16),
-                  ),
-                ],
+      final skillsToAdd = _selectedSkills
+          .where((skill) => !_userSkills.contains(skill['name']))
+          .toList();
+
+      if (skillsToAdd.isNotEmpty) {
+        await Supabase.instance.client.from('tbl_userskill').insert(
+              skillsToAdd
+                  .map((skill) => {
+                        'freelancer_id': user.id,
+                        'technicalskill_id': skill['id'],
+                      })
+                  .toList(),
+            );
+
+        await Supabase.instance.client
+            .from('tbl_freelancer')
+            .update({'freelancer_status': 1}).eq('freelancer_id', user.id);
+
+        await _fetchUserData();
+        setState(() => _selectedSkills.clear());
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Skills added successfully")),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("No new skills selected")),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error adding skills: $e")),
+      );
+    }
+  }
+
+  Future<void> _logout() async {
+    try {
+      await Supabase.instance.client.auth.signOut();
+      if (mounted) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => const LoginPage()),
+          (route) => false,
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error logging out: $e")),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8F2F7),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 2,
+        title: Text(
+          'Skill Connect',
+          style: GoogleFonts.poppins(
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+            color: const Color(0xFF2E7D32),
+          ),
+        ),
+        actions: [
+          GestureDetector(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const ProfilePage()),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+              child: CircleAvatar(
+                radius: 18,
+                backgroundImage: _profileImageUrl != null
+                    ? NetworkImage(_profileImageUrl!)
+                    : const AssetImage('assets/newlogo.png') as ImageProvider,
+                backgroundColor: const Color(0xFF2E7D32).withOpacity(0.2),
               ),
             ),
           ),
-        );
-      },
+          IconButton(
+            icon: const Icon(Icons.notifications, color: Color(0xFF2E7D32)),
+            onPressed: _showNotifications,
+            tooltip: 'Notifications',
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout, color: Color(0xFF2E7D32)),
+            onPressed: _logout,
+            tooltip: 'Logout',
+          ),
+        ],
+      ),
+      body: _isLoading
+          ? const Center(
+              child: CircularProgressIndicator(color: Color(0xFF2E7D32)))
+          : _errorMessage != null
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        _errorMessage!,
+                        style: GoogleFonts.poppins(color: Colors.red),
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: _loadData,
+                        child: Text('Retry', style: GoogleFonts.poppins()),
+                      ),
+                    ],
+                  ),
+                )
+              : SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 16),
+                      _buildWelcomeBanner(),
+                      const SizedBox(height: 16),
+                      _buildQuickActions(context),
+                      const SizedBox(height: 16),
+                      _buildFeaturedCarousel(context),
+                      const SizedBox(height: 16),
+                      _buildDailyTipBanner(),
+                      const SizedBox(height: 16),
+                      if (_freelancerStatus == 0) ...[
+                        _buildSkillsSection(),
+                        const SizedBox(height: 16),
+                      ],
+                      _buildRecentJobsList(context),
+                      const SizedBox(height: 16),
+                      _buildAllJobsLink(context),
+                      const SizedBox(height: 24),
+                    ],
+                  ),
+                ),
     );
   }
 
-  /// Recommended Jobs
-  Widget _buildRecommendedJobs() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          "Recommended Jobs",
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+  Widget _buildWelcomeBanner() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      color: Colors.white,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Hello, ${_userName ?? 'Freelancer'}!',
+            style: GoogleFonts.poppins(
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Find your next project today.',
+            style: GoogleFonts.poppins(
+              fontSize: 14,
+              color: Colors.grey.shade600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickActions(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          _buildActionButton(
+            context,
+            'My Requests',
+            Icons.list_alt,
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const MyRequestsPage()),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionButton(
+      BuildContext context, String label, IconData icon, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: MediaQuery.of(context).size.width * 0.45,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.15),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
         ),
-        const SizedBox(height: 10),
-        AnimatedList(
-          key: _listKey,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          initialItemCount: jobs.length,
-          itemBuilder: (context, index, animation) {
-            return SlideTransition(
-              position: Tween<Offset>(
-                begin: const Offset(1, 0),
-                end: const Offset(0, 0),
-              ).animate(animation),
-              child: Card(
-                elevation: 2,
-                child: ListTile(
-                  title: Text(jobs[index]["title"]!),
-                  trailing: Text(
-                    jobs[index]["price"]!,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF2E6F40),
-                    ),
-                  ),
-                  onTap: () {},
+        child: Row(
+          children: [
+            Icon(icon, color: const Color(0xFF2E7D32), size: 24),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                label,
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.black87,
                 ),
               ),
-            );
-          },
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 
-  /// Quick Actions
-  Widget _buildQuickActions() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: [
-        ElevatedButton.icon(
-          onPressed: () {},
-          icon: const Icon(Icons.send),
-          label: const Text("Submit Proposal"),
-          style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF2E6F40)),
+  Widget _buildFeaturedCarousel(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Featured Jobs',
+            style: GoogleFonts.poppins(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _featuredJobs.isEmpty
+              ? Center(
+                  child: Text(
+                    'No featured jobs available.',
+                    style: GoogleFonts.poppins(
+                      fontSize: 14,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                )
+              : CarouselSlider(
+                  options: CarouselOptions(
+                    height: MediaQuery.of(context).size.height * 0.25,
+                    autoPlay: true,
+                    enlargeCenterPage: true,
+                    viewportFraction: 0.8,
+                    aspectRatio: 16 / 9,
+                  ),
+                  items: _featuredJobs.map((job) {
+                    return Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        color: Colors.white,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.grey.withOpacity(0.15),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: Stack(
+                        children: [
+                          Positioned.fill(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.network(
+                                job['image_url'] ??
+                                    'https://via.placeholder.com/300',
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) =>
+                                    Container(
+                                  color: Colors.grey.shade200,
+                                  child: const Icon(
+                                    Icons.work_outline,
+                                    color: Colors.grey,
+                                    size: 50,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  Colors.transparent,
+                                  Colors.black.withOpacity(0.7),
+                                ],
+                              ),
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                Text(
+                                  job['work_title'] ?? 'Untitled Job',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '\$${double.tryParse(job['work_amount']?.toString() ?? '0')?.toStringAsFixed(2) ?? '0.00'}',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 14,
+                                    color: Colors.white70,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Align(
+                                  alignment: Alignment.bottomRight,
+                                  child: ElevatedButton(
+                                    onPressed: () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => WorkDetailsPage(
+                                            workId: job['work_id']),
+                                      ),
+                                    ),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF2E7D32),
+                                      foregroundColor: Colors.white,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 6,
+                                      ),
+                                    ),
+                                    child: Text(
+                                      'Apply Now',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDailyTipBanner() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2E7D32).withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.lightbulb, color: Color(0xFF2E7D32), size: 24),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              _dailyTip,
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: Colors.black87,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSkillsSection() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.15),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
         ),
-        ElevatedButton.icon(
-          onPressed: () {},
-          icon: const Icon(Icons.wallet),
-          label: const Text("View Earnings"),
-          style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF2E6F40)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Add New Skills',
+              style: GoogleFonts.poppins(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 12),
+            _availableSkills.isEmpty
+                ? Center(
+                    child: Text(
+                      'No skills available.',
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  )
+                : Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: _availableSkills.map((skill) {
+                      final isSelected =
+                          _selectedSkills.any((s) => s['id'] == skill['id']);
+                      return ChoiceChip(
+                        label: Text(skill['name']),
+                        selected: isSelected,
+                        selectedColor: const Color(0xFF2E7D32),
+                        backgroundColor: Colors.grey.shade100,
+                        labelStyle: TextStyle(
+                          color: isSelected ? Colors.white : Colors.black87,
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        onSelected: (selected) {
+                          setState(() {
+                            if (selected) {
+                              _selectedSkills.add(skill);
+                            } else {
+                              _selectedSkills
+                                  .removeWhere((s) => s['id'] == skill['id']);
+                            }
+                          });
+                        },
+                      );
+                    }).toList(),
+                  ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: _selectedSkills.isNotEmpty ? _addSelectedSkills : null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2E7D32),
+                foregroundColor: Colors.white,
+                minimumSize: const Size(double.infinity, 48),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: Text(
+                'Add Selected Skills',
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
         ),
-      ],
+      ),
+    );
+  }
+
+  Widget _buildRecentJobsList(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Recent Works',
+            style: GoogleFonts.poppins(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 120,
+            child: _recentJobs.isEmpty
+                ? Center(
+                    child: Text(
+                      'No recent works available.',
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  )
+                : ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _recentJobs.length,
+                    itemBuilder: (context, index) {
+                      final job = _recentJobs[index];
+                      return Container(
+                        width: MediaQuery.of(context).size.width * 0.4,
+                        margin: const EdgeInsets.only(right: 12),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.grey.withOpacity(0.15),
+                              blurRadius: 8,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              job['work_title'] ?? 'Untitled Job',
+                              style: GoogleFonts.poppins(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.black87,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '\$${double.tryParse(job['work_amount']?.toString() ?? '0')?.toStringAsFixed(2) ?? '0.00'}',
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAllJobsLink(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: GestureDetector(
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const AllJobsPage()),
+        ),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.grey.withOpacity(0.15),
+                blurRadius: 8,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Explore All Jobs',
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
+              const Icon(
+                Icons.arrow_forward,
+                color: Color(0xFF2E7D32),
+                size: 24,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
