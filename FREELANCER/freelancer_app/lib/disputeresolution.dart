@@ -216,7 +216,8 @@ class _DisputeResolutionPageState extends State<DisputeResolutionPage> {
           ),
         ),
       ),
-      backgroundColor: const Color(0xFFCFFFD6), // Light Mint Green background
+      backgroundColor: const Color.fromARGB(
+          255, 233, 240, 234), // Light Mint Green background
     );
   }
 

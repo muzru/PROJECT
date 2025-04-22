@@ -122,8 +122,10 @@ class _MyRequestsPageState extends State<MyRequestsPage> {
             supabase.storage.from(bucketName).getPublicUrl(fileName);
 
         // Update tbl_workrequest with file URL
-        await supabase.from('tbl_workrequest').update(
-            {'work_file': publicUrl}).eq('workrequest_id', workrequestId);
+        await supabase
+            .from('tbl_workrequest')
+            .update({'workrequest_file': publicUrl}).eq(
+                'workrequest_id', workrequestId);
 
         _loadRequests(); // Refresh the list
         ScaffoldMessenger.of(context).showSnackBar(

@@ -134,9 +134,11 @@ class _ManageClientsPageState extends State<ManageClientsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Manage Clients',
-            style:
-                GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.bold)),
+        title: Center(
+          child: Text('Manage Clients',
+              style: GoogleFonts.poppins(
+                  fontSize: 20, fontWeight: FontWeight.bold)),
+        ),
         backgroundColor: const Color(0xFF2E7D32),
       ),
       body: Padding(

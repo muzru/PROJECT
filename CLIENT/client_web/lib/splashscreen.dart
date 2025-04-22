@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:client_web/welcome.dart';
+import 'package:client_web/login.dart';
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 import 'package:animated_text_kit/animated_text_kit.dart';
@@ -41,7 +41,7 @@ class _SplashScreenState extends State<SplashScreen>
     Timer(const Duration(seconds: 5), () {
       Navigator.of(context).pushReplacement(
         PageRouteBuilder(
-          pageBuilder: (_, __, ___) => const WelcomePage(),
+          pageBuilder: (_, __, ___) => const LoginPage(),
           transitionsBuilder: (_, animation, __, child) {
             return FadeTransition(opacity: animation, child: child);
           },
@@ -61,7 +61,7 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: const Color.fromARGB(255, 9, 190, 114),
       body: Stack(
         children: [
           // 🌿 Forest Background Animation

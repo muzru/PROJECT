@@ -43,6 +43,7 @@ class _LoginPageState extends State<LoginPage>
             .from('tbl_freelancer')
             .select()
             .eq('freelancer_id', user.id)
+            .eq('freelancer_status', 1)
             .maybeSingle();
 
         if (freelancerResponse != null) {
@@ -74,15 +75,16 @@ class _LoginPageState extends State<LoginPage>
       );
 
       if (response.user != null) {
-        // Query tbl_freelancer to check if the user exists
+        // Query tbl_freelancer to check if the user exists and is verified
         final freelancerResponse = await Supabase.instance.client
             .from('tbl_freelancer')
             .select()
             .eq('freelancer_id', response.user!.id)
+            .eq('freelancer_status', 1) // Ensure freelancer_status is 1
             .maybeSingle();
 
         if (freelancerResponse != null) {
-          // Freelancer exists in tbl_freelancer
+          // Verified freelancer exists in tbl_freelancer
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text("Login Successful"),
@@ -94,11 +96,11 @@ class _LoginPageState extends State<LoginPage>
             MaterialPageRoute(builder: (context) => const HomePage()),
           );
         } else {
-          // No matching freelancer found
+          // No matching verified freelancer found
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content:
-                  Text("Account not found. Please sign up as a freelancer."),
+              content: Text(
+                  "Account not found or not verified. Please sign up or contact support."),
               backgroundColor: Colors.orange,
             ),
           );

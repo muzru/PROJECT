@@ -125,18 +125,41 @@ class _PaymentGatewayPageState extends State<PaymentGatewayPage> {
       // Log the workRequestId for debugging
       print("Updating workRequestId: ${widget.workRequestId}");
 
-      // Update workrequest_status to 5 in Supabase
-      final response = await supabase
+      // Fetch the work_id associated with the workrequest_id
+      final workRequestResponse = await supabase
+          .from('tbl_workrequest')
+          .select('work_id')
+          .eq('workrequest_id', widget.workRequestId)
+          .single();
+
+      final workId = workRequestResponse['work_id'] as int;
+
+      // Update workrequest_status to 5 in tbl_workrequest
+      final workRequestUpdate = await supabase
           .from('tbl_workrequest')
           .update({'workrequest_status': 5})
           .eq('workrequest_id', widget.workRequestId)
-          .select(); // Add select to return the updated row
+          .select();
 
-      if (response.isEmpty) {
-        throw Exception('No rows updated - check workRequestId or permissions');
+      if (workRequestUpdate.isEmpty) {
+        throw Exception(
+            'No rows updated in tbl_workrequest - check workRequestId or permissions');
       }
 
-      print("Update response: $response");
+      // Update work_status to 1 in tbl_work
+      final workUpdate = await supabase
+          .from('tbl_work')
+          .update({'work_status': 1}) // Assuming 1 means active/completed
+          .eq('work_id', workId)
+          .select();
+
+      if (workUpdate.isEmpty) {
+        throw Exception(
+            'No rows updated in tbl_work - check workId or permissions');
+      }
+
+      print(
+          "Update responses: workRequest: $workRequestUpdate, work: $workUpdate");
 
       if (mounted) Navigator.pop(context);
 

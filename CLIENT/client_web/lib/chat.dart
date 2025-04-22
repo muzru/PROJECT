@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -21,6 +23,8 @@ class _ChatState extends State<Chat> {
   final TextEditingController _messageController = TextEditingController();
   List<Map<String, dynamic>> messages = [];
   bool isLoading = true;
+  Timer? _timer;
+  DateTime? _lastMessageTime;
 
   @override
   void initState() {
@@ -28,9 +32,16 @@ class _ChatState extends State<Chat> {
     _initializeChat();
   }
 
+  @override
+  void dispose() {
+    _timer?.cancel(); // Cancel the timer when the widget is disposed
+    super.dispose();
+  }
+
   Future<void> _initializeChat() async {
     await fetchMessages();
     listenForMessages();
+    _startPeriodicCheck(); // Start the periodic check
   }
 
   Future<void> fetchMessages() async {
@@ -45,13 +56,19 @@ class _ChatState extends State<Chat> {
           .or(
             'fromfreelancer_id.eq.${widget.freelancerId},toclient_id.eq.${widget.clientId}',
           )
-          .order('created_at', ascending: true);
+          .order('created_at', ascending: true); // Add execute to get the data
 
       if (mounted) {
         setState(() {
-          messages =
-              response.map((msg) => Map<String, dynamic>.from(msg)).toList();
+          // Access response.data and cast it
+          messages = (response as List<dynamic>?)
+                  ?.map((msg) => Map<String, dynamic>.from(msg))
+                  .toList() ??
+              [];
           isLoading = false;
+          _lastMessageTime = messages.isNotEmpty
+              ? DateTime.parse(messages.last['created_at'])
+              : null;
         });
       }
     } catch (e) {
@@ -99,6 +116,9 @@ class _ChatState extends State<Chat> {
               // Sort messages by created_at
               messages.sort((a, b) => DateTime.parse(a['created_at'])
                   .compareTo(DateTime.parse(b['created_at'])));
+              _lastMessageTime = messages.isNotEmpty
+                  ? DateTime.parse(messages.last['created_at'])
+                  : null;
             });
           }
         })
@@ -113,6 +133,74 @@ class _ChatState extends State<Chat> {
             );
           }
         });
+  }
+
+  void _startPeriodicCheck() {
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) async {
+      await _checkForNewMessages();
+    });
+  }
+
+  Future<void> _checkForNewMessages() async {
+    try {
+      final response = await supabase
+          .from('tbl_chat')
+          .select()
+          .match({
+            'fromclient_id': widget.clientId,
+            'tofreelancer_id': widget.freelancerId,
+          })
+          .or(
+            'fromfreelancer_id.eq.${widget.freelancerId},toclient_id.eq.${widget.clientId}',
+          )
+          .gte(
+              'created_at',
+              _lastMessageTime?.toIso8601String() ??
+                  DateTime(1970).toIso8601String())
+          .order('created_at', ascending: true);
+      ; // Add execute to get the data
+
+      final newMessages = (response as List<dynamic>?)
+              ?.map((msg) => Map<String, dynamic>.from(msg))
+              .toList() ??
+          [];
+
+      if (newMessages.isNotEmpty && mounted) {
+        setState(() {
+          // Filter for messages from the opposite side
+          final oppositeMessages = newMessages.where((message) {
+            return (message['fromclient_id'] != widget.clientId &&
+                    message['tofreelancer_id'] == widget.freelancerId) ||
+                (message['fromfreelancer_id'] != widget.freelancerId &&
+                    message['toclient_id'] == widget.clientId);
+          }).toList();
+
+          if (oppositeMessages.isNotEmpty) {
+            messages.addAll(oppositeMessages);
+            messages.sort((a, b) => DateTime.parse(a['created_at'])
+                .compareTo(DateTime.parse(b['created_at'])));
+            _lastMessageTime = DateTime.parse(messages.last['created_at']);
+            // Optionally show a notification or scroll to the new message
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('New message from the other side!'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        });
+      }
+    } catch (e) {
+      print('Error checking for new messages: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error checking messages: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> sendMessage() async {
@@ -148,7 +236,8 @@ class _ChatState extends State<Chat> {
       if (mounted) {
         setState(() {
           // Replace the temporary message with the server response
-          final sentMessage = response.first as Map<String, dynamic>;
+          final sentMessage =
+              (response as List<dynamic>)[0] as Map<String, dynamic>;
           final index = messages.indexWhere((msg) => msg['chat_id'] == -1);
           if (index != -1) {
             messages[index] = sentMessage;
@@ -188,6 +277,12 @@ class _ChatState extends State<Chat> {
             color: const Color(0xFF2E7D32),
           ),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh, color: Colors.blue),
+            onPressed: fetchMessages, // Manual reload
+          ),
+        ],
       ),
       body: Column(
         children: [

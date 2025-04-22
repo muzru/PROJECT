@@ -150,6 +150,7 @@ class _JobPostingPageState extends State<JobPostingPage> {
           ),
         );
       } catch (e) {
+        print('Error posting job: $e');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error posting job: $e')),
         );

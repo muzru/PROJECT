@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:freelancer_app/joblisting.dart';
 import 'package:freelancer_app/login.dart';
 import 'package:freelancer_app/myrequest.dart';
 import 'package:freelancer_app/profile.dart';
 import 'package:freelancer_app/workdetails.dart';
+import 'package:freelancer_app/notifications.dart'; // New import
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:carousel_slider/carousel_slider.dart';
@@ -16,6 +19,7 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  final supabase = Supabase.instance.client;
   String? _userName;
   String? _profileImageUrl;
   List<String> _userSkills = [];
@@ -28,11 +32,29 @@ class _HomePageState extends State<HomePage> {
   String? _errorMessage;
   int? _freelancerStatus;
   final String _dailyTip = "Boost your profile by adding new skills today!";
+  Timer? _autoReloadTimer; // Timer for auto-reload
+
+  // Configurable status codes
+  static const int statusAccepted = 1; // Work request accepted
+  static const int statusRejected = 2; // Work request rejected
+  static const int statusPaymentReceived = 5; // Payment received
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    // Start auto-reload every 30 seconds (adjust as needed)
+    _autoReloadTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+      if (mounted) {
+        _loadData();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _autoReloadTimer?.cancel(); // Cancel timer when widget is disposed
+    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -53,19 +75,19 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _fetchUserData() async {
     try {
-      final user = Supabase.instance.client.auth.currentUser;
+      final user = supabase.auth.currentUser;
       if (user == null) {
         setState(() => _userName = 'Guest');
         return;
       }
 
-      final profileResponse = await Supabase.instance.client
+      final profileResponse = await supabase
           .from('tbl_freelancer')
           .select('freelancer_name, freelancer_photo, freelancer_status')
           .eq('freelancer_id', user.id)
           .single();
 
-      final skillsResponse = await Supabase.instance.client
+      final skillsResponse = await supabase
           .from('tbl_userskill')
           .select('technicalskill_id, tbl_technicalskill(technicalskill_name)')
           .eq('freelancer_id', user.id);
@@ -93,7 +115,7 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _fetchAvailableSkills() async {
     try {
-      final response = await Supabase.instance.client
+      final response = await supabase
           .from('tbl_technicalskill')
           .select('technicalskill_id, technicalskill_name');
       setState(() {
@@ -111,16 +133,16 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _fetchJobs() async {
     try {
-      final user = Supabase.instance.client.auth.currentUser;
+      final user = supabase.auth.currentUser;
       if (user == null) return;
 
-      final featuredResponse = await Supabase.instance.client
+      final featuredResponse = await supabase
           .from('tbl_work')
           .select('work_id, work_name, work_amount')
           .order('created_at', ascending: false)
           .limit(5);
 
-      final recentResponse = await Supabase.instance.client
+      final recentResponse = await supabase
           .from('tbl_workrequest')
           .select('''
             work_id,
@@ -154,192 +176,106 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _fetchNotifications() async {
     try {
-      final user = Supabase.instance.client.auth.currentUser;
-      if (user == null) return;
+      final user = supabase.auth.currentUser!.id;
+      if (user == null) {
+        print("No user logged in, skipping notification fetch.");
+        setState(() => _notifications = []);
+        return;
+      }
 
-      // Fetch unread messages from tbl_chat where the freelancer is the recipient
-      final chatResponse = await Supabase.instance.client
-          .from('tbl_chat')
-          .select('''
-          chat_id,
-          chat_content,
-          created_at,
-          fromfreelancer_id,
-          tbl_freelancer!tbl_chat_fromfreelancer_id_fkey (freelancer_name)
-        ''')
-          .eq('toclient_id',
-              user.id) // Assuming freelancer receives as client for simplicity
-          .eq('chat_isread', false) // Filter for unread messages
-          .order('created_at', ascending: false)
-          .limit(5);
-      print('Chat response: $chatResponse'); // Debugging output
+      print("Fetching notifications for freelancer_id: ${user}");
 
-      // Fetch accepted work requests from tbl_workrequest
-      final workRequestResponse = await Supabase.instance.client
+      final workRequestResponse = await supabase
           .from('tbl_workrequest')
           .select('''
-          workrequest_id,
-          work_id,
-          tbl_work (work_name),
-          created_at,
-          workrequest_status
-        ''')
-          .eq('freelancer_id', user.id)
-          .eq('workrequest_status',
-              1) // Adjust based on your status field (e.g., '2' for accepted)
-          .order('created_at', ascending: false)
-          .limit(5);
+            workrequest_id,
+            work_id,
+            freelancer_id,
+            tbl_work (work_name),
+            created_at,
+            workrequest_status,
+            is_readf
+          ''')
+          .eq('freelancer_id', user)
+          .eq('is_readf', false)
+          .inFilter('workrequest_status', [1, 2, 5]);
 
-      print('Work request response: $workRequestResponse'); // Debugging output
+      print("Work request response: $workRequestResponse");
+      print("Response type: ${workRequestResponse.runtimeType}");
+
+      if (workRequestResponse.isEmpty) {
+        print("No matching work requests found.");
+        setState(() => _notifications = []);
+        return;
+      }
 
       setState(() {
-        // Process chat messages
-        final chatNotifications =
-            List<Map<String, dynamic>>.from(chatResponse).map((msg) {
-          final freelancerData =
-              msg['tbl_freelancer!tbl_chat_fromfreelancer_id_fkey']
-                      as Map<String, dynamic>? ??
-                  {};
-          return {
-            'notification_id': msg['chat_id'],
-            'message':
-                '${freelancerData['freelancer_name'] ?? 'Unknown'}: ${msg['chat_content'] ?? 'New message'}',
-            'created_at': msg['created_at'],
-            'chat_id': msg['chat_id'], // Store chat_id for marking as read
-            'type': 'chat', // Tag as chat notification
-          };
-        }).toList();
-
-        // Process accepted work requests
-        final workRequestNotifications =
+        _notifications =
             List<Map<String, dynamic>>.from(workRequestResponse).map((req) {
+          print("Processing request: $req");
+
+          final status = req['workrequest_status'] as int? ?? 0;
+          final workName = req['tbl_work'] != null
+              ? (req['tbl_work']['work_name'] as String? ?? 'Unnamed Work')
+              : 'Unnamed Work';
+          String statusMessage;
+
+          switch (status) {
+            case statusAccepted:
+              statusMessage = 'Work request accepted: $workName';
+              break;
+            case statusRejected:
+              statusMessage = 'Work request rejected: $workName';
+              break;
+            case statusPaymentReceived:
+              statusMessage = 'Payment received: $workName';
+              break;
+            default:
+              statusMessage = 'Work request update: $workName';
+          }
+
           return {
             'notification_id': req['workrequest_id'],
-            'message':
-                'Work request accepted: ${req['tbl_work']['work_name'] ?? 'Unnamed Work'}',
-            'created_at': req['created_at'],
-            'work_id': req['work_id'], // Store work_id for potential navigation
-            'type': 'work_request', // Tag as work request notification
+            'message': statusMessage,
+            'created_at': req['created_at']?.toString() ?? 'N/A',
+            'workrequest_id': req['workrequest_id'],
+            'work_id': req['work_id'],
+            'type': 'work_request',
           };
         }).toList();
 
-        // Combine and sort by created_at
-        _notifications = [...chatNotifications, ...workRequestNotifications]
-          ..sort((a, b) =>
-              (b['created_at'] as String).compareTo(a['created_at'] as String));
+        print("Processed notifications: $_notifications");
       });
-    } catch (e) {
+    } catch (e, stackTrace) {
       print("Error fetching notifications: $e");
-      setState(() => _errorMessage =
-          "Failed to fetch notifications: $e"); // Update UI with error
+      print("Stack trace: $stackTrace");
+      setState(() {
+        _errorMessage = "Failed to fetch notifications: $e";
+        _notifications = [];
+      });
     }
   }
 
-  Future<void> _markAsRead(int chatId) async {
+  Future<void> _markAsRead(dynamic notificationId, String type) async {
     try {
-      await Supabase.instance.client
-          .from('tbl_chat')
-          .update({'chat_isread': true}).eq('chat_id', chatId);
-      await _fetchNotifications(); // Refresh notifications
+      if (type == 'work_request') {
+        await supabase
+            .from('tbl_workrequest')
+            .update({'is_readf': true}).eq('workrequest_id', notificationId);
+        print("Marked notification $notificationId as read");
+      }
+      await _fetchNotifications();
     } catch (e) {
+      print("Error marking as read: $e");
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Error marking as read: $e")),
       );
     }
   }
 
-  void _showNotifications() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(
-          'Notifications',
-          style: GoogleFonts.poppins(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: Colors.black87,
-          ),
-        ),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: _notifications.isEmpty
-              ? Center(
-                  child: Text(
-                    'No notifications available.',
-                    style: GoogleFonts.poppins(
-                      fontSize: 14,
-                      color: Colors.grey.shade600,
-                    ),
-                  ),
-                )
-              : ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: _notifications.length,
-                  itemBuilder: (context, index) {
-                    final notification = _notifications[index];
-                    final isChat = notification['type'] == 'chat';
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8.0),
-                      child: GestureDetector(
-                        onTap: () {
-                          if (isChat) {
-                            _markAsRead(notification['chat_id']);
-                          }
-                          // Optionally navigate to work details for work requests
-                          // Navigator.push(context, MaterialPageRoute(builder: (context) => WorkDetailsPage(workId: notification['work_id'])));
-                        },
-                        child: Row(
-                          children: [
-                            Icon(
-                              isChat ? Icons.message : Icons.work,
-                              color: const Color(0xFF2E7D32),
-                              size: 20,
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                notification['message'],
-                                style: GoogleFonts.poppins(
-                                  fontSize: 14,
-                                  color: Colors.black87,
-                                ),
-                              ),
-                            ),
-                            Text(
-                              notification['created_at']
-                                      ?.toString()
-                                      .split(' ')[0] ??
-                                  'N/A',
-                              style: GoogleFonts.poppins(
-                                fontSize: 12,
-                                color: Colors.grey.shade600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(
-              'Close',
-              style: GoogleFonts.poppins(
-                color: const Color(0xFF2E7D32),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _addSelectedSkills() async {
     try {
-      final user = Supabase.instance.client.auth.currentUser;
+      final user = supabase.auth.currentUser;
       if (user == null || _selectedSkills.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -354,7 +290,7 @@ class _HomePageState extends State<HomePage> {
           .toList();
 
       if (skillsToAdd.isNotEmpty) {
-        await Supabase.instance.client.from('tbl_userskill').insert(
+        await supabase.from('tbl_userskill').insert(
               skillsToAdd
                   .map((skill) => {
                         'freelancer_id': user.id,
@@ -363,7 +299,7 @@ class _HomePageState extends State<HomePage> {
                   .toList(),
             );
 
-        await Supabase.instance.client
+        await supabase
             .from('tbl_freelancer')
             .update({'freelancer_status': 1}).eq('freelancer_id', user.id);
 
@@ -386,7 +322,7 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _logout() async {
     try {
-      await Supabase.instance.client.auth.signOut();
+      await supabase.auth.signOut();
       if (mounted) {
         Navigator.pushAndRemoveUntil(
           context,
@@ -433,11 +369,7 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.notifications, color: Color(0xFF2E7D32)),
-            onPressed: _showNotifications,
-            tooltip: 'Notifications',
-          ),
+          _buildNotificationBadge(),
           IconButton(
             icon: const Icon(Icons.logout, color: Color(0xFF2E7D32)),
             onPressed: _logout,
@@ -465,30 +397,81 @@ class _HomePageState extends State<HomePage> {
                     ],
                   ),
                 )
-              : SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SizedBox(height: 16),
-                      _buildWelcomeBanner(),
-                      const SizedBox(height: 16),
-                      _buildQuickActions(context),
-                      const SizedBox(height: 16),
-                      _buildFeaturedCarousel(context),
-                      const SizedBox(height: 16),
-                      _buildDailyTipBanner(),
-                      const SizedBox(height: 16),
-                      if (_freelancerStatus == 0) ...[
-                        _buildSkillsSection(),
+              : RefreshIndicator(
+                  onRefresh: () async {
+                    await _loadData(); // Manual reload via pull-to-refresh
+                  },
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                         const SizedBox(height: 16),
+                        _buildWelcomeBanner(),
+                        const SizedBox(height: 16),
+                        _buildQuickActions(context),
+                        const SizedBox(height: 16),
+                        _buildFeaturedCarousel(context),
+                        const SizedBox(height: 16),
+                        _buildDailyTipBanner(),
+                        const SizedBox(height: 16),
+                        if (_freelancerStatus == 0) ...[
+                          _buildSkillsSection(),
+                          const SizedBox(height: 16),
+                        ],
+                        _buildRecentJobsList(context),
+                        const SizedBox(height: 16),
+                        _buildAllJobsLink(context),
+                        const SizedBox(height: 24),
                       ],
-                      _buildRecentJobsList(context),
-                      const SizedBox(height: 16),
-                      _buildAllJobsLink(context),
-                      const SizedBox(height: 24),
-                    ],
+                    ),
                   ),
                 ),
+    );
+  }
+
+  Widget _buildNotificationBadge() {
+    final unreadCount = _notifications.length;
+    return Stack(
+      children: [
+        IconButton(
+          icon: const Icon(Icons.notifications, color: Color(0xFF2E7D32)),
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const FreelancerNotificationsPage(),
+              ),
+            );
+          },
+          tooltip: 'Notifications',
+        ),
+        if (unreadCount > 0)
+          Positioned(
+            right: 8,
+            top: 8,
+            child: Container(
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                color: Colors.red,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              constraints: const BoxConstraints(
+                minWidth: 16,
+                minHeight: 16,
+              ),
+              child: Text(
+                unreadCount.toString(),
+                style: GoogleFonts.poppins(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+      ],
     );
   }
 
@@ -635,13 +618,11 @@ class _HomePageState extends State<HomePage> {
                                     'https://via.placeholder.com/300',
                                 fit: BoxFit.cover,
                                 errorBuilder: (context, error, stackTrace) =>
-                                    Container(
+                                    Image.asset(
+                                  'assets/newlogo.png',
+                                  fit: BoxFit.cover,
                                   color: Colors.grey.shade200,
-                                  child: const Icon(
-                                    Icons.work_outline,
-                                    color: Colors.grey,
-                                    size: 50,
-                                  ),
+                                  colorBlendMode: BlendMode.dstATop,
                                 ),
                               ),
                             ),

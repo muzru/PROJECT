@@ -1,4 +1,5 @@
 import 'package:client_web/login.dart';
+import 'package:client_web/splashscreen.dart';
 import 'package:flutter/material.dart';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -21,7 +22,7 @@ class MainApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return const MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: LoginPage(), // Removed the semicolon
+      home: SplashScreen(), // Removed the semicolon
     );
   }
 }

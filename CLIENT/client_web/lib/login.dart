@@ -26,21 +26,61 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _checkAuthState() async {
     final session = supabase.auth.currentSession;
     if (session != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const ClientDashboard()),
-        );
-      });
-      return;
+      // Check if the user is a verified client
+      try {
+        final clientResponse = await supabase
+            .from('tbl_client')
+            .select()
+            .eq('client_id', session.user.id)
+            .eq('client_status', 1)
+            .maybeSingle();
+
+        if (clientResponse != null && mounted) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const ClientDashboard()),
+            );
+          });
+        } else {
+          // Log out if not a verified client
+          await supabase.auth.signOut();
+        }
+      } catch (e) {
+        print("Error checking client: $e");
+      }
     }
 
-    supabase.auth.onAuthStateChange.listen((AuthState state) {
+    supabase.auth.onAuthStateChange.listen((AuthState state) async {
       if (state.session != null && mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const ClientDashboard()),
-        );
+        // Check if the user is a verified client
+        try {
+          final clientResponse = await supabase
+              .from('tbl_client')
+              .select()
+              .eq('client_id', state.session!.user.id)
+              .eq('client_status', 1)
+              .maybeSingle();
+
+          if (clientResponse != null) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const ClientDashboard()),
+            );
+          } else {
+            // Log out if not a verified client
+            await supabase.auth.signOut();
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                    "Account not found or not verified. Please sign up or contact support."),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        } catch (e) {
+          print("Error checking client: $e");
+        }
       }
     });
   }
@@ -71,17 +111,43 @@ class _LoginPageState extends State<LoginPage> {
 
     setState(() => _isLoading = true);
     try {
-      await supabase.auth.signInWithPassword(
+      // Authenticate with Supabase
+      final response = await supabase.auth.signInWithPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text,
       );
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Login successful!"),
-          backgroundColor: Colors.green,
-        ),
-      );
+      // Check if the user is a verified client
+      final clientResponse = await supabase
+          .from('tbl_client')
+          .select()
+          .eq('client_id', response.user!.id)
+          .eq('client_status', 1)
+          .maybeSingle();
+
+      if (clientResponse != null) {
+        // Verified client exists
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Login successful!"),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const ClientDashboard()),
+        );
+      } else {
+        // No matching verified client found
+        await supabase.auth.signOut(); // Log out the user
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                "Account not found or not verified. Please sign up or contact support."),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     } on AuthException catch (e) {
       String errorMessage;
       switch (e.message) {

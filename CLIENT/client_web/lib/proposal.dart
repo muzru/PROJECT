@@ -4,6 +4,7 @@ import 'package:client_web/payments.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart'; // Added dependency
 
 class ProposalsPage extends StatefulWidget {
   final VoidCallback? onProposalAccepted;
@@ -99,7 +100,7 @@ class _ProposalsPageState extends State<ProposalsPage> {
     }
   }
 
-  // Map workrequest_status to a readable status based on new definitions
+  // Map workrequest_status to a readable status
   String _mapStatus(dynamic status) {
     switch (status) {
       case 1:
@@ -111,9 +112,29 @@ class _ProposalsPageState extends State<ProposalsPage> {
       case 4:
         return 'Ended';
       case 5:
-        return 'Paid'; // New status for when payment is completed
+        return 'Paid';
       default:
         return 'Pending';
+    }
+  }
+
+  // Get status-specific message
+  String _getStatusMessage(String status) {
+    switch (status) {
+      case 'Pending':
+        return 'Waiting for your approval';
+      case 'Accepted':
+        return 'Messages'; // Indicates chat is available
+      case 'Rejected':
+        return 'Proposal rejected';
+      case 'Started':
+        return 'Work in progress';
+      case 'Ended':
+        return 'Work completed, ready for payment';
+      case 'Paid':
+        return 'Payment completed, download available';
+      default:
+        return 'Unknown status';
     }
   }
 
@@ -122,6 +143,9 @@ class _ProposalsPageState extends State<ProposalsPage> {
       await Supabase.instance.client.from('tbl_workrequest').update(
           {'workrequest_status': status}).eq('workrequest_id', workrequestId);
       await _fetchProposals(); // Refresh proposals
+      if (status == 1 && widget.onProposalAccepted != null) {
+        widget.onProposalAccepted!();
+      }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Error updating status: $e")),
@@ -169,18 +193,32 @@ class _ProposalsPageState extends State<ProposalsPage> {
     );
   }
 
-  void _downloadFile(int index) {
+  Future<void> _downloadFile(int index) async {
     final fileUrl = proposals[index]['file_url'];
     if (fileUrl == null || fileUrl.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("No file available for download")),
       );
-    } else {
+      return;
+    }
+
+    try {
+      if (await canLaunchUrl(Uri.parse(fileUrl))) {
+        await launchUrl(Uri.parse(fileUrl),
+            mode: LaunchMode
+                .externalApplication); // Opens in browser or file manager
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("File download initiated")),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Could not launch URL: $fileUrl")),
+        );
+      }
+    } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Downloading file from: $fileUrl")),
+        SnackBar(content: Text("Error downloading file: $e")),
       );
-      // For demo, just show URL; use url_launcher for real downloads
-      // launchUrl(Uri.parse(fileUrl)); // Uncomment if using url_launcher
     }
   }
 
@@ -224,13 +262,11 @@ class _ProposalsPageState extends State<ProposalsPage> {
                       itemCount: proposals.length,
                       itemBuilder: (context, index) {
                         final proposal = proposals[index];
-                        final isWorkComplete =
-                            proposal['status'] == 'Started' ||
-                                proposal['status'] == 'Ended';
                         final showChat = proposal['status'] != 'Pending' &&
                             proposal['status'] != 'Rejected';
-                        final showPaymentDownload = proposal['status'] ==
-                            'Ended'; // Changed to status 4
+                        final showPaymentDownload =
+                            proposal['status'] == 'Ended';
+                        final showDownload = proposal['status'] == 'Paid';
 
                         return Card(
                           margin: const EdgeInsets.all(10),
@@ -260,12 +296,12 @@ class _ProposalsPageState extends State<ProposalsPage> {
                                 ),
                                 const SizedBox(height: 5),
                                 Text(
-                                  "Status: ${proposal['status']}",
+                                  _getStatusMessage(proposal['status']),
                                   style: GoogleFonts.poppins(
                                     fontSize: 14,
-                                    fontWeight: FontWeight.bold,
+                                    fontWeight: FontWeight.w500,
                                     color: proposal['status'] == 'Accepted'
-                                        ? Colors.green
+                                        ? Colors.blue
                                         : proposal['status'] == 'Rejected'
                                             ? Colors.red
                                             : proposal['status'] == 'Started'
@@ -315,20 +351,12 @@ class _ProposalsPageState extends State<ProposalsPage> {
                                     tooltip: "Reject Proposal",
                                   ),
                                 ],
-                                if (proposal['status'] == 'Accepted')
-                                  IconButton(
-                                    icon: const Icon(Icons.play_arrow,
-                                        color: Colors.orange),
-                                    onPressed: () => _updateProposalStatus(
-                                        proposal['workrequest_id'], 3),
-                                    tooltip: "Start Work",
-                                  ),
                                 if (showChat)
                                   IconButton(
                                     icon: const Icon(Icons.chat,
                                         color: Colors.purple),
                                     onPressed: () => _navigateToChat(index),
-                                    tooltip: "Chat",
+                                    tooltip: "Messages",
                                   ),
                                 if (showPaymentDownload)
                                   IconButton(
@@ -337,7 +365,7 @@ class _ProposalsPageState extends State<ProposalsPage> {
                                     onPressed: () => _navigateToPayment(index),
                                     tooltip: "Pay",
                                   ),
-                                if (proposal['status'] == 'Paid')
+                                if (showDownload)
                                   IconButton(
                                     icon: const Icon(Icons.download,
                                         color: Colors.green),

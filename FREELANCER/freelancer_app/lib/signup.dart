@@ -53,6 +53,7 @@ class _SignupPageState extends State<SignupPage> {
         'freelancer_email': _emailController.text.trim(),
         'freelancer_contact': _contactController.text.trim(),
         'freelancer_photo': photoUrl,
+        'freelancer_password': _passwordController.text,
       });
 
       ScaffoldMessenger.of(context).showSnackBar(

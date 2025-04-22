@@ -1,0 +1,2 @@
+D:/SkillConnect/FREELANCER/freelancer_app/android/app/.cxx/RelWithDebInfo/3836671q/x86/CMakeFiles/edit_cache.dir
+D:/SkillConnect/FREELANCER/freelancer_app/android/app/.cxx/RelWithDebInfo/3836671q/x86/CMakeFiles/rebuild_cache.dir

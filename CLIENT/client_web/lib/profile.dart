@@ -23,10 +23,28 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
   int _totalProjects = 0; // Count of projects with work_status = 0
   int _completedProjects = 0; // Count of projects with work_status = 1
 
+  // Controllers for password change
+  final TextEditingController _currentPasswordController =
+      TextEditingController();
+  final TextEditingController _newPasswordController = TextEditingController();
+  final TextEditingController _confirmPasswordController =
+      TextEditingController();
+
   @override
   void initState() {
     super.initState();
     _fetchClientProfile();
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    _phoneController.dispose();
+    _currentPasswordController.dispose();
+    _newPasswordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
   }
 
   Future<void> _fetchClientProfile() async {
@@ -45,8 +63,7 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
       final workResponse = await supabase
           .from('tbl_work')
           .select()
-          .eq('client_id', userId)
-          .eq('work_status', 0); // All projects
+          .eq('client_id', userId); // All projects
       print(workResponse);
       _totalProjects = workResponse.length ?? 0;
 
@@ -158,6 +175,94 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
     }
   }
 
+  Future<void> _changePassword() async {
+    if (_currentPasswordController.text.isEmpty ||
+        _newPasswordController.text.isEmpty ||
+        _confirmPasswordController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('All fields are required')),
+      );
+      return;
+    }
+
+    if (_newPasswordController.text != _confirmPasswordController.text) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('New passwords do not match')),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    try {
+      await supabase.auth.updateUser(
+        UserAttributes(
+          password: _newPasswordController.text,
+        ),
+      );
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Password changed successfully!'),
+            backgroundColor: Colors.green),
+      );
+
+      // Clear controllers after success
+      _currentPasswordController.clear();
+      _newPasswordController.clear();
+      _confirmPasswordController.clear();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text('Error changing password: $e'),
+            backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+      if (mounted) Navigator.of(context).pop(); // Close the dialog
+    }
+  }
+
+  void _showChangePasswordDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Change Password'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _currentPasswordController,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: 'Current Password'),
+            ),
+            TextField(
+              controller: _newPasswordController,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: 'New Password'),
+            ),
+            TextField(
+              controller: _confirmPasswordController,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: 'Confirm Password'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: _isLoading ? null : _changePassword,
+            child: _isLoading
+                ? const CircularProgressIndicator(color: Colors.white)
+                : const Text('Change Password'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
@@ -199,6 +304,15 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
               label: const Text(
                 "Cancel",
                 style: TextStyle(color: Colors.red),
+              ),
+            ),
+          if (!_isEditing)
+            TextButton.icon(
+              onPressed: _showChangePasswordDialog,
+              icon: const Icon(Icons.lock, color: Color(0xFF2E6F40)),
+              label: const Text(
+                "Change Password",
+                style: TextStyle(color: Color(0xFF2E6F40)),
               ),
             ),
         ],
@@ -547,13 +661,5 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
           ),
       ],
     );
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _emailController.dispose();
-    _phoneController.dispose();
-    super.dispose();
   }
 }

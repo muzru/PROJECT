@@ -134,6 +134,10 @@ class _ChatState extends State<Chat> {
     }
   }
 
+  Future<void> _refreshMessages() async {
+    await fetchMessages();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -156,35 +160,40 @@ class _ChatState extends State<Chat> {
                 ? const Center(child: CircularProgressIndicator())
                 : messages.isEmpty
                     ? const Center(child: Text('No messages yet'))
-                    : ListView.builder(
-                        reverse: false,
-                        itemCount: messages.length,
-                        itemBuilder: (context, index) {
-                          final message = messages[index];
-                          final isMe = message['fromfreelancer_id'] ==
-                              widget.freelancerId;
+                    : RefreshIndicator(
+                        onRefresh: _refreshMessages,
+                        child: ListView.builder(
+                          reverse: false,
+                          itemCount: messages.length,
+                          itemBuilder: (context, index) {
+                            final message = messages[index];
+                            final isMe = message['fromfreelancer_id'] ==
+                                widget.freelancerId;
 
-                          return Align(
-                            alignment: isMe
-                                ? Alignment.centerRight
-                                : Alignment.centerLeft,
-                            child: Container(
-                              margin: const EdgeInsets.symmetric(
-                                  vertical: 5, horizontal: 10),
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color:
-                                    isMe ? Colors.blueAccent : Colors.grey[300],
-                                borderRadius: BorderRadius.circular(10),
+                            return Align(
+                              alignment: isMe
+                                  ? Alignment.centerRight
+                                  : Alignment.centerLeft,
+                              child: Container(
+                                margin: const EdgeInsets.symmetric(
+                                    vertical: 5, horizontal: 10),
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: isMe
+                                      ? Colors.blueAccent
+                                      : Colors.grey[300],
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Text(
+                                  message['chat_content'] ?? '',
+                                  style: TextStyle(
+                                      color:
+                                          isMe ? Colors.white : Colors.black),
+                                ),
                               ),
-                              child: Text(
-                                message['chat_content'] ?? '',
-                                style: TextStyle(
-                                    color: isMe ? Colors.white : Colors.black),
-                              ),
-                            ),
-                          );
-                        },
+                            );
+                          },
+                        ),
                       ),
           ),
           Padding(

@@ -9,7 +9,7 @@
         tools:replace="android:maxSdkVersion" /> <!-- 👈 Fixed line -->
 
     <application
-        android:label="freelancer_app"
+        android:label="SkillConnect"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:freelancer_app/activityitem.dart';
 import 'package:freelancer_app/dashboardcard.dart';
 import 'package:freelancer_app/dispute.dart';
 import 'package:freelancer_app/login.dart';
@@ -22,15 +21,15 @@ class _AdminDashboardState extends State<AdminDashboard> {
   final supabase = Supabase.instance.client;
   int _selectedIndex = 0;
   bool _isSidebarExpanded = true;
-  Map<String, int> _stats = {};
+  String? _adminName;
 
   final List<Widget> _pages = [];
 
   @override
   void initState() {
     super.initState();
-    _fetchDashboardStats();
     _initializePages();
+    _fetchAdminName();
   }
 
   void _initializePages() {
@@ -46,35 +45,26 @@ class _AdminDashboardState extends State<AdminDashboard> {
     ]);
   }
 
-  Future<void> _fetchDashboardStats() async {
+  Future<void> _fetchAdminName() async {
     try {
-      final freelancersResponse =
-          await supabase.from('tbl_freelancer').select('freelancer_id');
-      final clientsResponse =
-          await supabase.from('tbl_client').select('client_id');
-      final worksResponse = await supabase.from('tbl_work').select('work_id');
-      final notificationsResponse =
-          await supabase.from('tbl_complaint').select('id');
-
-      if (mounted) {
-        setState(() {
-          _stats = {
-            "Total Freelancers": freelancersResponse.length,
-            "Total Clients": clientsResponse.length,
-            "Total Works": worksResponse.length,
-            "Active Notifications": notificationsResponse.length,
-          };
-        });
+      final user = supabase.auth.currentUser;
+      if (user != null) {
+        final response = await supabase
+            .from('tbl_admin')
+            .select('admin_name')
+            .eq('admin_id', user.id)
+            .maybeSingle();
+        if (response != null) {
+          setState(() {
+            _adminName = response['admin_name'] ?? 'Admin';
+          });
+        }
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Error fetching stats: $e"),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      print('Error fetching admin name: $e');
+      setState(() {
+        _adminName = 'Admin';
+      });
     }
   }
 
@@ -112,7 +102,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
       body: SafeArea(
         child: Row(
           children: [
-            // Sidebar
             AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               width: _isSidebarExpanded ? 250 : 70,
@@ -182,7 +171,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                               isSelected: _selectedIndex == 5,
                               isExpanded: _isSidebarExpanded,
                               onTap: () => _onItemTapped(5),
-                              badgeCount: _stats["Active Notifications"]),
+                              badgeCount: 0),
                           SidebarItem(
                               icon: Icons.analytics,
                               title: 'Reports',
@@ -203,11 +192,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 ),
               ),
             ),
-            // Main Content
             Expanded(
               child: Column(
                 children: [
-                  // App bar
                   Container(
                     height: 64,
                     padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -237,26 +224,29 @@ class _AdminDashboardState extends State<AdminDashboard> {
                         const Spacer(),
                         IconButton(
                             icon: const Icon(Icons.refresh),
-                            onPressed: _fetchDashboardStats),
+                            onPressed: () {
+                              setState(
+                                  () {}); // Trigger rebuild to refresh counts
+                            }),
                         const SizedBox(width: 8),
-                        IconButton(
-                          icon: Badge(
-                            label:
-                                Text(_stats['Active Notifications'].toString()),
-                            isLabelVisible: _stats['Active Notifications']! > 0,
-                            child: const Icon(Icons.notifications),
-                          ),
-                          onPressed: () => _onItemTapped(5),
+                        Row(
+                          children: [
+                            Text(
+                              _adminName ?? 'Loading...',
+                              style: const TextStyle(
+                                  fontSize: 16, fontWeight: FontWeight.w600),
+                            ),
+                            const SizedBox(width: 8),
+                            const CircleAvatar(
+                              backgroundColor: Color(0xFF2E6F40),
+                              child: Icon(Icons.person, color: Colors.white),
+                            ),
+                          ],
                         ),
                         const SizedBox(width: 16),
-                        const CircleAvatar(
-                          backgroundColor: Color(0xFF2E6F40),
-                          child: Icon(Icons.person, color: Colors.white),
-                        ),
                       ],
                     ),
                   ),
-                  // Content
                   Expanded(
                     child: Container(
                       color: Colors.grey.shade50,
@@ -293,55 +283,97 @@ class _AdminDashboardState extends State<AdminDashboard> {
     }
   }
 
+  Future<Map<String, int>> _fetchStats() async {
+    try {
+      final freelancersCount = await supabase.from('tbl_freelancer').count();
+      final clientsCount = await supabase.from('tbl_client').count();
+      final worksCount = await supabase.from('tbl_work').count();
+
+      return {
+        "Total Freelancers": freelancersCount,
+        "Total Clients": clientsCount,
+        "Total Works": worksCount,
+      };
+    } catch (e) {
+      print('Error fetching stats: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Error fetching stats: $e"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return {
+        "Total Freelancers": 0,
+        "Total Clients": 0,
+        "Total Works": 0,
+      };
+    }
+  }
+
   Widget _buildDashboardContent() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          GridView.count(
-            crossAxisCount: 4,
-            crossAxisSpacing: 16,
-            mainAxisSpacing: 16,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            childAspectRatio: 1.5,
-            children: [
-              DashboardStatsCard(
-                title: 'Total Freelancers',
-                value: _stats['Total Freelancers'] ?? 0,
-                icon: Icons.people,
-                color: Colors.blue,
-                showTrend: true,
-                isIncreasing: true,
-                trendValue: '+12%',
-              ),
-              DashboardStatsCard(
-                title: 'Total Clients',
-                value: _stats['Total Clients'] ?? 0,
-                icon: Icons.business,
-                color: Colors.green,
-                showTrend: true,
-                isIncreasing: true,
-                trendValue: '+8%',
-              ),
-              DashboardStatsCard(
-                title: 'Total Works',
-                value: _stats['Total Works'] ?? 0,
-                icon: Icons.work,
-                color: Colors.orange,
-                showTrend: false,
-                isIncreasing: false,
-                trendValue: '-3%',
-              ),
-              DashboardStatsCard(
-                title: 'Active Notifications',
-                value: _stats['Active Notifications'] ?? 0,
-                icon: Icons.notifications,
-                color: Colors.red,
-                showTrend: false,
-              ),
-            ],
+          FutureBuilder<Map<String, int>>(
+            future: _fetchStats(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snapshot.hasError) {
+                return const Center(child: Text('Error loading stats'));
+              }
+              final stats = snapshot.data ??
+                  {
+                    "Total Freelancers": 0,
+                    "Total Clients": 0,
+                    "Total Works": 0,
+                  };
+              return GridView.count(
+                crossAxisCount: 3,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                childAspectRatio: 1.5,
+                children: [
+                  DashboardStatsCard(
+                    key: ValueKey(stats['Total Freelancers']),
+                    title: 'Total Freelancers',
+                    value: stats['Total Freelancers']!,
+                    icon: Icons.people,
+                    color: Colors.blue,
+                    showTrend: true,
+                    isIncreasing: true,
+                    trendValue: '+12%',
+                  ),
+                  DashboardStatsCard(
+                    key: ValueKey(stats['Total Clients']),
+                    title: 'Total Clients',
+                    value: stats['Total Clients']!,
+                    icon: Icons.business,
+                    color: Colors.green,
+                    showTrend: true,
+                    isIncreasing: true,
+                    trendValue: '+8%',
+                  ),
+                  DashboardStatsCard(
+                    key: ValueKey(stats['Total Works']),
+                    title: 'Total Works',
+                    value: stats['Total Works']!,
+                    icon: Icons.work,
+                    color: Colors.orange,
+                    showTrend: false,
+                    isIncreasing: false,
+                    trendValue: '-3%',
+                  ),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 32),
           const Text('Quick Actions',

@@ -507,7 +507,7 @@ class _ReportsPageState extends State<ReportsPage> {
                 border: Border.all(color: Colors.grey.shade300),
               ),
               minX: 0,
-              maxX: data.length > 0 ? data.length - 1.0 : 0,
+              maxX: data.isNotEmpty ? data.length - 1.0 : 0,
               minY: 0,
               maxY: data.isNotEmpty
                   ? data
@@ -664,7 +664,7 @@ class _ReportsPageState extends State<ReportsPage> {
                           ],
                         ),
                       );
-                    }).toList(),
+                    }),
                     const SizedBox(height: 16),
                     Text(
                       'Total: $total',

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class DisputeResolutionPage extends StatefulWidget {
   const DisputeResolutionPage({super.key});
@@ -34,9 +35,11 @@ class _DisputeResolutionPageState extends State<DisputeResolutionPage> {
       final userId = supabase.auth.currentUser!.id;
       final response = await supabase
           .from('tbl_complaint')
-          .select()
+          .select(
+              'id, client_id, category, description, created_at, complaint_reply') // Add replied_at if it exists
           .eq('client_id', userId)
           .order('created_at', ascending: false);
+
       setState(() {
         _complaints =
             (response as List).map((e) => e as Map<String, dynamic>).toList();
@@ -87,17 +90,28 @@ class _DisputeResolutionPageState extends State<DisputeResolutionPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Dispute Resolution'),
+        title: Text(
+          'Dispute Resolution',
+          style: GoogleFonts.poppins(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         backgroundColor: const Color(0xFF2E6F40),
+        elevation: 0,
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Select Dispute Category:',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              style: GoogleFonts.poppins(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
             ),
             const SizedBox(height: 10),
             DropdownButtonFormField(
@@ -105,7 +119,7 @@ class _DisputeResolutionPageState extends State<DisputeResolutionPage> {
               items: _categories.map((category) {
                 return DropdownMenuItem(
                   value: category,
-                  child: Text(category),
+                  child: Text(category, style: GoogleFonts.poppins()),
                 );
               }).toList(),
               onChanged: (value) {
@@ -113,30 +127,48 @@ class _DisputeResolutionPageState extends State<DisputeResolutionPage> {
                   _selectedCategory = value.toString();
                 });
               },
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                border: const OutlineInputBorder(),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                filled: true,
+                fillColor: Colors.grey[100],
               ),
             ),
             const SizedBox(height: 20),
-            const Text(
+            Text(
               'Describe Your Issue:',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              style: GoogleFonts.poppins(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
             ),
             const SizedBox(height: 10),
             TextField(
               controller: _descriptionController,
               maxLines: 5,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                border: const OutlineInputBorder(),
                 hintText: 'Enter dispute details here...',
+                hintStyle: GoogleFonts.poppins(color: Colors.grey[600]),
+                filled: true,
+                fillColor: Colors.grey[100],
               ),
+              style: GoogleFonts.poppins(),
             ),
             const SizedBox(height: 20),
             Center(
               child: ElevatedButton(
                 onPressed: _isLoading ? null : _submitComplaint,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange,
+                  backgroundColor: const Color(0xFF2E6F40),
+                  foregroundColor: Colors.white,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
                 child: _isLoading
                     ? const SizedBox(
@@ -147,43 +179,112 @@ class _DisputeResolutionPageState extends State<DisputeResolutionPage> {
                           strokeWidth: 2,
                         ),
                       )
-                    : const Text('Submit Dispute'),
+                    : Text(
+                        'Submit Dispute',
+                        style: GoogleFonts.poppins(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
               ),
             ),
             const SizedBox(height: 20),
-            const Text(
+            Text(
               'Your Disputes:',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              style: GoogleFonts.poppins(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
             ),
             const SizedBox(height: 10),
             Expanded(
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator())
                   : _complaints.isEmpty
-                      ? const Center(child: Text('No disputes found'))
+                      ? Center(
+                          child: Text(
+                            'No disputes found',
+                            style: GoogleFonts.poppins(
+                              fontSize: 16,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        )
                       : ListView.builder(
                           itemCount: _complaints.length,
                           itemBuilder: (context, index) {
                             final complaint = _complaints[index];
+                            final hasReply =
+                                complaint['complaint_reply'] != null &&
+                                    complaint['complaint_reply']
+                                        .toString()
+                                        .isNotEmpty;
+
                             return Card(
                               margin: const EdgeInsets.symmetric(vertical: 8.0),
-                              child: ListTile(
-                                title: Text(
-                                  complaint['category'],
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.bold),
-                                ),
-                                subtitle: Column(
+                              elevation: 2,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.all(16.0),
+                                child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(complaint['description']),
-                                    const SizedBox(height: 4),
+                                    Text(
+                                      complaint['category'],
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: const Color(0xFF2E6F40),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      complaint['description'],
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 14,
+                                        color: Colors.black87,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
                                     Text(
                                       'Submitted on: ${complaint['created_at']?.toString().split('T')[0] ?? 'N/A'}',
-                                      style: TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.grey[600]),
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 12,
+                                        color: Colors.grey[600],
+                                      ),
                                     ),
+                                    if (hasReply) ...[
+                                      const Divider(height: 16),
+                                      Text(
+                                        'Reply:',
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.blue[700],
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        complaint['complaint_reply'],
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 14,
+                                          color: Colors.blue[700],
+                                          fontStyle: FontStyle.italic,
+                                        ),
+                                      ),
+                                      // Uncomment if replied_at exists in tbl_complaint
+                                      // const SizedBox(height: 4),
+                                      // Text(
+                                      //   'Replied on: ${complaint['replied_at']?.toString().split('T')[0] ?? 'N/A'}',
+                                      //   style: GoogleFonts.poppins(
+                                      //     fontSize: 12,
+                                      //     color: Colors.grey[600],
+                                      //   ),
+                                      // ),
+                                    ],
                                   ],
                                 ),
                               ),
